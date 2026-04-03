@@ -165,8 +165,9 @@ class _MapScreenState extends State<MapScreen>
       setState(() => _isSearching = true);
       try {
         // Use Nominatim API for highly accurate, address-rich autocomplete
+        final encodedQuery = Uri.encodeComponent(query);
         String url =
-            'https://nominatim.openstreetmap.org/search?q=$query&format=json&addressdetails=1&limit=8';
+            'https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&addressdetails=1&limit=8';
 
         // Bias towards current location
         if (_currentPosition != null) {
@@ -177,8 +178,7 @@ class _MapScreenState extends State<MapScreen>
               '&viewbox=${lon - offset},${lat + offset},${lon + offset},${lat - offset}&bounded=0';
         }
 
-        final res = await http
-            .get(Uri.parse(url), headers: {'User-Agent': 'NavAssistApp/1.0'});
+        final res = await http.get(Uri.parse(url));
         if (res.statusCode == 200) {
           final List<dynamic> data = json.decode(res.body);
           setState(() {
@@ -248,10 +248,10 @@ class _MapScreenState extends State<MapScreen>
 
     try {
       // 1. Geocode via Nominatim
+      final encodedQuery = Uri.encodeComponent(query);
       final geocodeUrl = Uri.parse(
-          'https://nominatim.openstreetmap.org/search?q=$query&format=json&limit=1');
-      final geoRes = await http
-          .get(geocodeUrl, headers: {'User-Agent': 'NavAssistApp/1.0'});
+          'https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&limit=1');
+      final geoRes = await http.get(geocodeUrl);
 
       if (geoRes.statusCode == 200) {
         final data = json.decode(geoRes.body);
