@@ -164,25 +164,24 @@ class _MapScreenState extends State<MapScreen>
     _debounce = Timer(const Duration(milliseconds: 600), () async {
       setState(() => _isSearching = true);
       try {
-        // Use Nominatim API for highly accurate, address-rich autocomplete
+        // Switch to Photon API (Komoot). Nominatim frequently throws strict CORS
+        // XMLHttpRequest errors on Flutter Web. Photon is specifically built for Web CORS.
         final encodedQuery = Uri.encodeComponent(query);
-        String url =
-            'https://nominatim.openstreetmap.org/search?q=$encodedQuery&format=json&addressdetails=1&limit=8';
+        String url = 'https://photon.komoot.io/api/?q=$encodedQuery&limit=8';
 
-        // Bias towards current location
+        // Bias towards current location (e.g. Meerut)
         if (_currentPosition != null) {
           double lat = _currentPosition!.latitude;
           double lon = _currentPosition!.longitude;
-          double offset = 0.5; // roughly 50km viewbox
-          url +=
-              '&viewbox=${lon - offset},${lat + offset},${lon + offset},${lat - offset}&bounded=0';
+          url += '&lat=$lat&lon=$lon';
         }
 
         final res = await http.get(Uri.parse(url));
+
         if (res.statusCode == 200) {
-          final List<dynamic> data = json.decode(res.body);
+          final data = json.decode(res.body);
           setState(() {
-            _suggestions = data;
+            _suggestions = data['features'] ?? [];
           });
         }
       } catch (e) {
@@ -481,6 +480,7 @@ class _MapScreenState extends State<MapScreen>
       left: 16,
       right: 16,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             decoration: BoxDecoration(
@@ -557,18 +557,20 @@ class _MapScreenState extends State<MapScreen>
                   itemCount: _suggestions.length,
                   itemBuilder: (context, index) {
                     final feature = _suggestions[index];
-                    final address = feature['address'] ?? {};
+                    final props = feature['properties'] ?? {};
+                    final geom = feature['geometry']['coordinates'] as List;
 
-                    String title = feature['name'] ??
-                        address['name'] ??
-                        address['road'] ??
-                        feature['display_name']?.split(',').first ??
-                        'Location';
-                    String subtitle = feature['display_name'] ?? '';
+                    String title = props['name'] ?? 'Location';
 
-                    // Get coordinates
-                    double lat = double.tryParse(feature['lat'] ?? '0') ?? 0.0;
-                    double lon = double.tryParse(feature['lon'] ?? '0') ?? 0.0;
+                    // Construct a subtitle with whatever address info is available
+                    String subtitle = [
+                      props['street'],
+                      props['city'],
+                      props['state'],
+                      props['country']
+                    ]
+                        .where((e) => e != null && e.toString().isNotEmpty)
+                        .join(', ');
 
                     return ListTile(
                       leading:
@@ -579,13 +581,15 @@ class _MapScreenState extends State<MapScreen>
                           style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold)),
-                      subtitle: Text(subtitle,
+                      subtitle: Text(
+                          subtitle.isNotEmpty ? subtitle : "Unknown Address",
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                               color: Colors.white54, fontSize: 12)),
                       onTap: () {
-                        _routeToDestination(lat, lon, title);
+                        // Photon coordinates are [lon, lat]
+                        _routeToDestination(geom[1], geom[0], title);
                       },
                     );
                   },
