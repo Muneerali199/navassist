@@ -164,19 +164,25 @@ class _MapScreenState extends State<MapScreen>
     _debounce = Timer(const Duration(milliseconds: 600), () async {
       setState(() => _isSearching = true);
       try {
-        // Use Photon API for real-world fast autocomplete (Free, based on OSM)
-        // We bias the search towards the user's current location so they get local results first!
-        String url = 'https://photon.komoot.io/api/?q=$query&limit=5';
+        // Use Nominatim API for highly accurate, address-rich autocomplete
+        String url =
+            'https://nominatim.openstreetmap.org/search?q=$query&format=json&addressdetails=1&limit=8';
+
+        // Bias towards current location
         if (_currentPosition != null) {
+          double lat = _currentPosition!.latitude;
+          double lon = _currentPosition!.longitude;
+          double offset = 0.5; // roughly 50km viewbox
           url +=
-              '&lat=${_currentPosition!.latitude}&lon=${_currentPosition!.longitude}';
+              '&viewbox=${lon - offset},${lat + offset},${lon + offset},${lat - offset}&bounded=0';
         }
 
-        final res = await http.get(Uri.parse(url));
+        final res = await http
+            .get(Uri.parse(url), headers: {'User-Agent': 'NavAssistApp/1.0'});
         if (res.statusCode == 200) {
-          final data = json.decode(res.body);
+          final List<dynamic> data = json.decode(res.body);
           setState(() {
-            _suggestions = data['features'] ?? [];
+            _suggestions = data;
           });
         }
       } catch (e) {
@@ -543,39 +549,47 @@ class _MapScreenState extends State<MapScreen>
                   )
                 ],
               ),
-              child: ListView.builder(
-                padding: EdgeInsets.zero,
-                shrinkWrap: true, // Only take as much space as needed
-                itemCount: _suggestions.length,
-                itemBuilder: (context, index) {
-                  final feature = _suggestions[index];
-                  final props = feature['properties'];
-                  final geom = feature['geometry']['coordinates'];
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 280),
+                child: ListView.builder(
+                  padding: EdgeInsets.zero,
+                  shrinkWrap: true,
+                  itemCount: _suggestions.length,
+                  itemBuilder: (context, index) {
+                    final feature = _suggestions[index];
+                    final address = feature['address'] ?? {};
 
-                  String title = props['name'] ?? 'Unknown Place';
+                    String title = feature['name'] ??
+                        address['name'] ??
+                        address['road'] ??
+                        feature['display_name']?.split(',').first ??
+                        'Location';
+                    String subtitle = feature['display_name'] ?? '';
 
-                  // Construct a subtitle with whatever address info is available
-                  String subtitle = [
-                    props['street'],
-                    props['city'],
-                    props['state'],
-                    props['country']
-                  ].where((e) => e != null).join(', ');
+                    // Get coordinates
+                    double lat = double.tryParse(feature['lat'] ?? '0') ?? 0.0;
+                    double lon = double.tryParse(feature['lon'] ?? '0') ?? 0.0;
 
-                  return ListTile(
-                    leading:
-                        const Icon(Icons.location_on, color: Colors.white70),
-                    title: Text(title,
-                        style: const TextStyle(
-                            color: Colors.white, fontWeight: FontWeight.bold)),
-                    subtitle: Text(subtitle.isNotEmpty ? subtitle : "Location",
-                        style: const TextStyle(
-                            color: Colors.white54, fontSize: 12)),
-                    onTap: () {
-                      _routeToDestination(geom[1], geom[0], title);
-                    },
-                  );
-                },
+                    return ListTile(
+                      leading:
+                          const Icon(Icons.location_on, color: Colors.white70),
+                      title: Text(title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold)),
+                      subtitle: Text(subtitle,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                              color: Colors.white54, fontSize: 12)),
+                      onTap: () {
+                        _routeToDestination(lat, lon, title);
+                      },
+                    );
+                  },
+                ),
               ),
             ),
         ],
