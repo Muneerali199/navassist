@@ -164,12 +164,9 @@ class _MapScreenState extends State<MapScreen>
     _debounce = Timer(const Duration(milliseconds: 600), () async {
       setState(() => _isSearching = true);
       try {
-        // Switch to Photon API (Komoot). Nominatim frequently throws strict CORS
-        // XMLHttpRequest errors on Flutter Web. Photon is specifically built for Web CORS.
         final encodedQuery = Uri.encodeComponent(query);
         String url = 'https://photon.komoot.io/api/?q=$encodedQuery&limit=8';
 
-        // Bias towards current location (e.g. Meerut)
         if (_currentPosition != null) {
           double lat = _currentPosition!.latitude;
           double lon = _currentPosition!.longitude;
@@ -182,6 +179,18 @@ class _MapScreenState extends State<MapScreen>
           final data = json.decode(res.body);
           setState(() {
             _suggestions = data['features'] ?? [];
+            if (_suggestions.isEmpty) {
+              // Add a fake suggestion just so the UI shows up
+              _suggestions.add({
+                'properties': {
+                  'name': 'Searching exact: $query',
+                  'city': 'Press Send to Search',
+                },
+                'geometry': {
+                  'coordinates': [0.0, 0.0]
+                }
+              });
+            }
           });
         }
       } catch (e) {
@@ -588,8 +597,11 @@ class _MapScreenState extends State<MapScreen>
                           style: const TextStyle(
                               color: Colors.white54, fontSize: 12)),
                       onTap: () {
-                        // Photon coordinates are [lon, lat]
-                        _routeToDestination(geom[1], geom[0], title);
+                        if (geom[0] == 0.0 && geom[1] == 0.0) {
+                          _searchDestination(_searchController.text);
+                        } else {
+                          _routeToDestination(geom[1], geom[0], title);
+                        }
                       },
                     );
                   },
