@@ -42,6 +42,11 @@ class _MapScreenState extends State<MapScreen>
   double _distanceToDestination = 0.0;
   bool _isRouting = false;
 
+  // Search Autocomplete State
+  Timer? _debounce;
+  List<dynamic> _suggestions = [];
+  bool _isSearching = false;
+
   @override
   void initState() {
     super.initState();
@@ -146,6 +151,86 @@ class _MapScreenState extends State<MapScreen>
     }
 
     _checkObstacles();
+  }
+
+  void _onSearchChanged(String query) {
+    if (_debounce?.isActive ?? false) _debounce!.cancel();
+
+    if (query.length < 3) {
+      setState(() => _suggestions = []);
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 600), () async {
+      setState(() => _isSearching = true);
+      try {
+        // Use Photon API for real-world fast autocomplete (Free, based on OSM)
+        // We bias the search towards the user's current location so they get local results first!
+        String url = 'https://photon.komoot.io/api/?q=$query&limit=5';
+        if (_currentPosition != null) {
+          url +=
+              '&lat=${_currentPosition!.latitude}&lon=${_currentPosition!.longitude}';
+        }
+
+        final res = await http.get(Uri.parse(url));
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body);
+          setState(() {
+            _suggestions = data['features'] ?? [];
+          });
+        }
+      } catch (e) {
+        debugPrint("Autocomplete error: $e");
+      } finally {
+        if (mounted) setState(() => _isSearching = false);
+      }
+    });
+  }
+
+  Future<void> _routeToDestination(double lat, double lon, String title) async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _suggestions = [];
+      _isRouting = true;
+      _destination = LatLng(lat, lon);
+      _searchController.text = title;
+    });
+
+    await flutterTts.speak("Routing to $title");
+
+    try {
+      final routeUrl = Uri.parse(
+          'http://router.project-osrm.org/route/v1/walking/${_currentPosition!.longitude},${_currentPosition!.latitude};$lon,$lat?geometries=geojson');
+      final routeRes = await http.get(routeUrl);
+
+      if (routeRes.statusCode == 200) {
+        final routeData = json.decode(routeRes.body);
+        if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
+          final geometry =
+              routeData['routes'][0]['geometry']['coordinates'] as List;
+
+          setState(() {
+            _routePath =
+                geometry.map((coord) => LatLng(coord[1], coord[0])).toList();
+            _distanceToDestination =
+                routeData['routes'][0]['distance'].toDouble();
+          });
+
+          // Frame the map to show the route
+          final bounds =
+              LatLngBounds.fromPoints([_currentPosition!, _destination!]);
+          _mapController.fitCamera(CameraFit.bounds(
+              bounds: bounds, padding: const EdgeInsets.all(80)));
+
+          await flutterTts.speak(
+              "Route found. Distance is ${_distanceToDestination.toInt()} meters. Follow the neon purple line.");
+        }
+      }
+    } catch (e) {
+      await flutterTts.speak("Network error while routing.");
+    } finally {
+      if (mounted) setState(() => _isRouting = false);
+    }
   }
 
   Future<void> _searchDestination(String query) async {
@@ -261,6 +346,7 @@ class _MapScreenState extends State<MapScreen>
     _positionStream?.cancel();
     _pulseController.dispose();
     _searchController.dispose();
+    _debounce?.cancel();
     flutterTts.stop();
     super.dispose();
   }
@@ -388,54 +474,111 @@ class _MapScreenState extends State<MapScreen>
       top: 100,
       left: 16,
       right: 16,
-      child: Container(
-        decoration: BoxDecoration(
-            color: AppTheme.glassPanel,
-            borderRadius: BorderRadius.circular(30),
-            border: Border.all(color: Colors.white24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.3),
-                blurRadius: 10,
-                offset: const Offset(0, 5),
-              )
-            ]),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        child: Row(
-          children: [
-            const Icon(Icons.search, color: AppTheme.primaryBlue),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: _searchController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  hintText: "Enter destination (e.g. Hospital, Park)",
-                  hintStyle: TextStyle(color: Colors.white54),
-                  border: InputBorder.none,
+      child: Column(
+        children: [
+          Container(
+            decoration: BoxDecoration(
+                color: AppTheme.glassPanel,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(color: Colors.white24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  )
+                ]),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: [
+                const Icon(Icons.search, color: AppTheme.primaryBlue),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: const InputDecoration(
+                      hintText: "Enter destination (e.g. Hospital)",
+                      hintStyle: TextStyle(color: Colors.white54),
+                      border: InputBorder.none,
+                    ),
+                    onChanged: _onSearchChanged,
+                    onSubmitted: _searchDestination,
+                  ),
                 ),
-                onSubmitted: _searchDestination,
+                if (_isRouting || _isSearching)
+                  const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: AppTheme.primaryBlue),
+                  )
+                else if (_destination != null)
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white70),
+                    onPressed: _cancelRoute,
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.send, color: AppTheme.primaryBlue),
+                    onPressed: () => _searchDestination(_searchController.text),
+                  ),
+              ],
+            ),
+          ),
+
+          // --- AUTOCOMPLETE SUGGESTIONS DROPDOWN ---
+          if (_suggestions.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.glassPanel,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white24),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.3),
+                    blurRadius: 10,
+                    offset: const Offset(0, 5),
+                  )
+                ],
+              ),
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                shrinkWrap: true, // Only take as much space as needed
+                itemCount: _suggestions.length,
+                itemBuilder: (context, index) {
+                  final feature = _suggestions[index];
+                  final props = feature['properties'];
+                  final geom = feature['geometry']['coordinates'];
+
+                  String title = props['name'] ?? 'Unknown Place';
+
+                  // Construct a subtitle with whatever address info is available
+                  String subtitle = [
+                    props['street'],
+                    props['city'],
+                    props['state'],
+                    props['country']
+                  ].where((e) => e != null).join(', ');
+
+                  return ListTile(
+                    leading:
+                        const Icon(Icons.location_on, color: Colors.white70),
+                    title: Text(title,
+                        style: const TextStyle(
+                            color: Colors.white, fontWeight: FontWeight.bold)),
+                    subtitle: Text(subtitle.isNotEmpty ? subtitle : "Location",
+                        style: const TextStyle(
+                            color: Colors.white54, fontSize: 12)),
+                    onTap: () {
+                      _routeToDestination(geom[1], geom[0], title);
+                    },
+                  );
+                },
               ),
             ),
-            if (_isRouting)
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                    strokeWidth: 2, color: AppTheme.primaryBlue),
-              )
-            else if (_destination != null)
-              IconButton(
-                icon: const Icon(Icons.close, color: Colors.white70),
-                onPressed: _cancelRoute,
-              )
-            else
-              IconButton(
-                icon: const Icon(Icons.send, color: AppTheme.primaryBlue),
-                onPressed: () => _searchDestination(_searchController.text),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
