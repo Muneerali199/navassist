@@ -40,7 +40,9 @@ class _MapScreenState extends State<MapScreen>
   LatLng? _destination;
   List<LatLng> _routePath = [];
   double _distanceToDestination = 0.0;
+  double _durationToDestination = 0.0;
   bool _isRouting = false;
+  bool _isMapReady = false;
 
   // Search Autocomplete State
   Timer? _debounce;
@@ -142,11 +144,13 @@ class _MapScreenState extends State<MapScreen>
       if (_destination != null) {
         _distanceToDestination = const Distance()
             .as(LengthUnit.Meter, _currentPosition!, _destination!);
+        _durationToDestination =
+            _distanceToDestination / 1.4; // 1.4 m/s avg walking speed
       }
     });
 
     // Only auto-follow if we are not looking at a route overview
-    if (_destination == null) {
+    if (_destination == null && _isMapReady) {
       _mapController.moveAndRotate(newPoint, 19.0, _currentHeading);
     }
 
@@ -228,6 +232,8 @@ class _MapScreenState extends State<MapScreen>
                 geometry.map((coord) => LatLng(coord[1], coord[0])).toList();
             _distanceToDestination =
                 routeData['routes'][0]['distance'].toDouble();
+            _durationToDestination =
+                routeData['routes'][0]['duration'].toDouble();
           });
 
           // Frame the map to show the route
@@ -278,10 +284,15 @@ class _MapScreenState extends State<MapScreen>
             if (routeData['routes'] != null && routeData['routes'].isNotEmpty) {
               final geometry =
                   routeData['routes'][0]['geometry']['coordinates'] as List;
-              _routePath =
-                  geometry.map((coord) => LatLng(coord[1], coord[0])).toList();
-              _distanceToDestination =
-                  routeData['routes'][0]['distance'].toDouble();
+              setState(() {
+                _routePath = geometry
+                    .map((coord) => LatLng(coord[1], coord[0]))
+                    .toList();
+                _distanceToDestination =
+                    routeData['routes'][0]['distance'].toDouble();
+                _durationToDestination =
+                    routeData['routes'][0]['duration'].toDouble();
+              });
 
               // Frame the map to show the route
               final bounds =
@@ -310,6 +321,7 @@ class _MapScreenState extends State<MapScreen>
       _destination = null;
       _routePath.clear();
       _distanceToDestination = 0.0;
+      _durationToDestination = 0.0;
       _searchController.clear();
       if (_currentPosition != null) {
         _mapController.moveAndRotate(_currentPosition!, 19.0, _currentHeading);
@@ -413,6 +425,15 @@ class _MapScreenState extends State<MapScreen>
                 initialCenter: _currentPosition!,
                 initialZoom: 19.0,
                 maxZoom: 22.0, // Allow extreme zoom
+                onMapReady: () {
+                  setState(() {
+                    _isMapReady = true;
+                  });
+                  if (_currentPosition != null && _destination == null) {
+                    _mapController.moveAndRotate(
+                        _currentPosition!, 19.0, _currentHeading);
+                  }
+                },
               ),
               children: [
                 // Ultra-HD Satellite + Labels (Google Hybrid Map)
@@ -685,12 +706,24 @@ class _MapScreenState extends State<MapScreen>
                 children: [
                   const Icon(Icons.directions_walk,
                       color: Colors.purpleAccent, size: 28),
-                  Text(
-                    "Distance: ${_distanceToDestination > 1000 ? (_distanceToDestination / 1000).toStringAsFixed(1) + ' km' : _distanceToDestination.toInt().toString() + ' m'}",
-                    style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        "Distance: ${_distanceToDestination > 1000 ? (_distanceToDestination / 1000).toStringAsFixed(1) + ' km' : _distanceToDestination.toInt().toString() + ' m'}",
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        "ETA: ${_durationToDestination > 60 ? (_durationToDestination / 60).toInt().toString() + ' min' : _durationToDestination.toInt().toString() + ' sec'}",
+                        style: const TextStyle(
+                            color: Colors.purpleAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600),
+                      ),
+                    ],
                   ),
                 ],
               )

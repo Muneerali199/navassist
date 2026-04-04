@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'screens/home_screen.dart';
+import 'screens/role_selection_screen.dart';
 import 'theme/app_theme.dart';
 
 void main() {
@@ -17,7 +16,7 @@ class NavAssistApp extends StatelessWidget {
       title: 'NavAssist',
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme,
-      home: const HomeScreen(),
+      home: const RoleSelectionScreen(),
     );
   }
 }

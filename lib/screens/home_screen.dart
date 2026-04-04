@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
+import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
-import '../widgets/sensor_radar.dart';
-import '../widgets/sos_button.dart';
 import '../widgets/status_badge.dart';
+import '../widgets/sos_button.dart';
+import '../widgets/sensor_radar.dart';
 import '../widgets/brand_logo.dart';
 import 'map_screen.dart';
+import 'settings_screen.dart';
+import 'vision_screen.dart';
+import 'about_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -44,7 +48,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: IconButton(
               icon: const Icon(Icons.settings_outlined, size: 24),
               onPressed: () {
-                // Open settings
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => const SettingsScreen()),
+                );
               },
             ),
           ),
@@ -133,70 +141,79 @@ class _HomeScreenState extends State<HomeScreen> {
                   const SizedBox(height: 24),
 
                   // Glassmorphism AI Camera Status Card
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(32),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: AppTheme.glassPanel,
-                          borderRadius: BorderRadius.circular(32),
-                          border: Border.all(
-                              color: Colors.white.withOpacity(0.08),
-                              width: 1.5),
-                          boxShadow: [
-                            BoxShadow(
-                                color: Colors.black.withOpacity(0.2),
-                                blurRadius: 30,
-                                offset: const Offset(0, 15)),
-                          ],
-                        ),
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(16),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    AppTheme.primaryBlue.withOpacity(0.2),
-                                    AppTheme.accentPurple.withOpacity(0.1)
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const VisionScreen()),
+                      );
+                    },
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(32),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 16.0, sigmaY: 16.0),
+                        child: Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: AppTheme.glassPanel,
+                            borderRadius: BorderRadius.circular(32),
+                            border: Border.all(
+                                color: Colors.white.withOpacity(0.08),
+                                width: 1.5),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withOpacity(0.2),
+                                  blurRadius: 30,
+                                  offset: const Offset(0, 15)),
+                            ],
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      AppTheme.primaryBlue.withOpacity(0.2),
+                                      AppTheme.accentPurple.withOpacity(0.1)
+                                    ],
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                  ),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                      color: AppTheme.primaryBlue
+                                          .withOpacity(0.5)),
                                 ),
-                                shape: BoxShape.circle,
-                                border: Border.all(
-                                    color:
-                                        AppTheme.primaryBlue.withOpacity(0.5)),
+                                child: const Icon(Icons.remove_red_eye_outlined,
+                                    color: AppTheme.primaryBlue, size: 36),
                               ),
-                              child: const Icon(Icons.remove_red_eye_outlined,
-                                  color: AppTheme.primaryBlue, size: 36),
-                            ),
-                            const SizedBox(width: 20),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text("Neural Engine",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge
-                                          ?.copyWith(fontSize: 22)),
-                                  const SizedBox(height: 6),
-                                  Text("YOLOv8 Nano • Vision Clear",
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .bodyMedium
-                                          ?.copyWith(
-                                            color: AppTheme.safeGreen,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 0.5,
-                                          )),
-                                ],
+                              const SizedBox(width: 20),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text("Neural Engine",
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(fontSize: 22)),
+                                    const SizedBox(height: 6),
+                                    Text("YOLOv8 Nano • Tap to Open",
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .bodyMedium
+                                            ?.copyWith(
+                                              color: AppTheme.safeGreen,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.5,
+                                            )),
+                                  ],
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ),
                     ),
@@ -211,7 +228,26 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 50),
+                  const SizedBox(height: 30),
+
+                  // Dashboard quick access
+                  TextButton.icon(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (context) => const AboutScreen()),
+                      );
+                    },
+                    icon: const Icon(Icons.info_outline,
+                        color: AppTheme.primaryBlue),
+                    label: const Text(
+                      "About NavAssist AI & Models",
+                      style: TextStyle(color: Colors.white, fontSize: 16),
+                    ),
+                  ),
+
+                  const SizedBox(height: 30),
 
                   // Emergency Safety Layer
                   const EmergencySosButton(),
